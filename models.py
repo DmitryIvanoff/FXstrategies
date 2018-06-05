@@ -34,9 +34,6 @@ def LSTM_model(input_dim):
 
 def MLP_model(input_dim):
     model = Sequential()
-    # Dense(64) is a fully-connected layer with 64 hidden units.
-    # in the first layer, you must specify the expected input data shape:
-    # here, 20-dimensional vectors.
     model.add(Dense(64, activation='relu', input_dim=input_dim))
     model.add(Dropout(0.5))
     model.add(Dense(64, activation='relu'))
