@@ -1,21 +1,16 @@
 '''
-Здесь реализована загрузка и отрисовка данных
+модуль содержит различные ф-ии для
+preprocessing данных
 '''
-
-from const import VALUTE_PAIRS
-from const import VALUTES
+from const import BROKERS
 import pandas as pd
 import os.path
+from broker import OANDA
 
 
-
-
-def mklbls():
-    brokers = ['Bitfinex', 'Poloniex', 'Exmo', 'Gdax', 'Kraken']
-    bs = ['buy', 'sell']
-    labels = [(b, p, s) for b in brokers for p in VALUTE_PAIRS for s in bs]
+def mklbls(brokers,instruments,candle):
+    labels = [(b, p, s) for b in brokers for p in instruments for s in candle]
     return labels
-
 
 def load_data(files):
     '''
@@ -29,7 +24,7 @@ def load_data(files):
     :param files:  from where we load data
     :return: returns pd.DataFrame
     '''
-    index = pd.MultiIndex.from_tuples(mklbls(), names=['broker', 'pair', 'b/s'])
+    index = pd.MultiIndex.from_tuples(mklbls(), names=['broker', 'pair', 'candle'])
     data = pd.DataFrame(columns=index)
     #print(data)
     for i in files:
@@ -38,7 +33,6 @@ def load_data(files):
         data = data.append(df, ignore_index=True)
         #print(data)
     return data
-
 
 def dataset(data, brokers=None, pairs=None):
     '''
@@ -60,7 +54,6 @@ def dataset(data, brokers=None, pairs=None):
             array = data.loc[:, (brokers, pairs)]
     array = array.as_matrix()
     return array
-
 
 if __name__ == '__main__':
     #print(index)

@@ -14,8 +14,6 @@ np.random.seed(1335)  # for reproducibility
 np.set_printoptions(precision=5, suppress=True, linewidth=150)
 
 
-
-
 def init_state(data, time_step):
     """
     :param data: данные
@@ -279,9 +277,9 @@ def strategy(show=False,*params, **kwargs):
 
 
 
-from scipy.optimize import minimize
+#from scipy.optimize import minimize
 
-simplex = None
+#simplex = None
 #res = minimize(strategion, [ 0.88 ,  200  , -200 ],method='Nelder-Mead',options={'maxiter':1000,'disp':True,'initial_simplex':simplex})
 #print(res.get('x'))
 #strategy(res.get('x'),True)

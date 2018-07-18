@@ -1,3 +1,7 @@
+'''
+модуль содержит классы/функции
+для представления различных моделей/алгоритмов ML
+'''
 # This neural network is the the Q-function, run it like this:
 # model.predict(state.reshape(1,64), batch_size=1)
 

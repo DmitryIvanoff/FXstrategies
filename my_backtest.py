@@ -1,5 +1,6 @@
-from const import VALUTE_PAIRS
-from const import VALUTES
+from const import BROKERS
+
+
 class Backtest:
     '''
 
