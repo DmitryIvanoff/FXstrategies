@@ -5,62 +5,35 @@ preprocessing данных
 from const import BROKERS
 import pandas as pd
 import os.path
-from broker import OANDA
+import datetime
 
 
-def mklbls(brokers,instruments,candle):
-    labels = [(b, p, s) for b in brokers for p in instruments for s in candle]
-    return labels
-
-def load_data(files):
+def candles_to_DataFrame(candles):
     '''
-    Загружаем "историю"
-    формируем шапку:
-    broker    Bitfinex     ...  Kraken
-    pair      BTC/USD ...       BTC/USD ...
-    b/s       buy  sell         buy sell
-    в переменной index и
-    сливаем все df в один
-    :param files:  from where we load data
-    :return: returns pd.DataFrame
+    Функция преобразует список ('историю') в pd.DataFrame
+    (формат свечи соответствует брокеру OANDA)
+    :param candles: [<v20.instrument.CandleStick>,...]
+    :return:
     '''
-    index = pd.MultiIndex.from_tuples(mklbls(), names=['broker', 'pair', 'candle'])
-    data = pd.DataFrame(columns=index)
-    #print(data)
-    for i in files:
-        df = pd.read_csv(i)
-        df.columns = index
-        data = data.append(df, ignore_index=True)
-        #print(data)
+    data = pd.DataFrame()
+    for candle in candles:
+        d = candle.dict()
+        dt = datetime.datetime.strptime(d['time'],"%Y-%m-%dT%H:%M:%S.000000000Z")
+        df = pd.DataFrame(data={'time': dt ,'volume': d['volume'],'complete': d['complete']},columns=['time','volume','complete'],index=[0])
+        bid = pd.DataFrame(data=d['bid'],columns=['o', 'h', 'l', 'c'],index=[0],dtype='float64')
+        ask = pd.DataFrame(data=d['ask'],columns=['o', 'h', 'l', 'c'],index=[0],dtype='float64')
+        labels = [(l1, l2) for l1 in ['bid'] for l2 in ['o', 'h', 'l', 'c']]
+        index = pd.MultiIndex.from_tuples(labels, names=['candle', 'prices'])
+        bid.columns = pd.MultiIndex.from_tuples(index)
+        labels = [(l1, l2) for l1 in ['ask'] for l2 in ['o', 'h', 'l', 'c']]
+        index = pd.MultiIndex.from_tuples(labels, names=['candle', 'prices'])
+        #index.rename('ask',level=0)
+        ask.columns = pd.MultiIndex.from_tuples(index)
+        df = pd.concat([df,bid,ask],axis=1)
+        data = data.append(df,ignore_index=True)
     return data
+def preprocess_data(data):
+    xdata = data.values
+    return xdata
 
-def dataset(data, brokers=None, pairs=None):
-    '''
-    формируем выборку из "истории"
-    :param data:  pd.DataFrame, "история", с которой мы работаем
-    :param brokers: список брокеров
-    :param pairs: список валютных пар
-    :return: returns ndarray
-    '''
-    if brokers is None:
-        if pairs is None:
-            array = data
-        else:
-            array = data.loc[:, (slice(None), pairs)]
-    else:
-        if pairs is None:
-            array = data.loc[:, (brokers)]
-        else:
-            array = data.loc[:, (brokers, pairs)]
-    array = array.as_matrix()
-    return array
 
-if __name__ == '__main__':
-    #print(index)
-    # print(nparr.shape)
-    # print(nparr)
-    data = load_data(map((lambda x: os.path.join(os.path.abspath('data'), x)), os.listdir('data')))
-
-    #print (data)
-    data = (dataset(data))
-    print(data)

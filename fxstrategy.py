@@ -14,7 +14,7 @@ class FXStrategy:
     def __init__(self):
         pass
     @abstractmethod
-    def trade(self):
+    def trade(self,instruments):
         pass
 
     def run(self):

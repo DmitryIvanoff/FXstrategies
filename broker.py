@@ -6,6 +6,7 @@ FXStrategy
 '''
 import v20
 import datetime
+import pandas as pd
 
 class Broker:
     '''
@@ -15,10 +16,10 @@ class Broker:
     def __init__(self):
         pass
 
-    def get_orders(self,*args, **kwargs):
+    def get_pendingOrders(self,*args, **kwargs):
         pass
 
-    def get_opentrades(self,*args, **kwargs):
+    def get_openTrades(self,*args, **kwargs):
         pass
 
     def create_order(self,*args, **kwargs):
@@ -33,12 +34,18 @@ class Broker:
     def get_history(self, *args, **kwargs):
         pass
 
+    def get_balance(self, *args, **kwargs):
+        pass
+    def get_commissions(self,*args, **kwargs):
+        pass
+
+
 class OANDA(Broker):
 
-    def __init__(self,hostname='api-fxpractice.oanda.com',token=None):
+    def __init__(self,hostname='api-fxpractice.oanda.com',token=None,**kwargs):
         super(OANDA, self).__init__()
         # self.backtest = backtest.Backtest(self) циклическая ссылка!
-        self.ctx = v20.Context(hostname, token=token)
+        self.ctx = v20.Context(hostname, token=token,**kwargs)
         self.accountsList = self.ctx.account.list().body.get('accounts')
         self.accounts = [self.ctx.account.summary(account.id).body.get('account') for account in self.accountsList]
 
@@ -52,7 +59,7 @@ class OANDA(Broker):
         self.accounts = [self.ctx.account.summary(account.id).body.get('account') for account in self.accountsList]
         return self.accounts
 
-    def get_orders(self):
+    def get_pendingOrders(self,*args, **kwargs):
         '''
         GET /v3/accounts/{accountID}/pendingOrders
         все висящие ордера
@@ -60,7 +67,7 @@ class OANDA(Broker):
         '''
         return {account.currency: self.ctx.order.list_pending(account.id).body.get('orders') for account in self.accounts}
 
-    def get_opentrades(self):
+    def get_openTrades(self):
         '''
         GET /v3/accounts/{accountID}/openTrades
         все открытые сделки
@@ -123,7 +130,7 @@ class OANDA(Broker):
 
     def close_trade(self,currency,tradeScpecifier=None, **specs):
         '''
-        закрывает все открытые сделки по дааной валюте
+        закрывает все открытые сделки по данной валюте
         PUT /v3/accounts/{accountID}/trades/{tradeSpecifier}/close
         :param currency: валюта, связанная с аккаунтом
         :param tradeScpecifier: tradeID
@@ -271,7 +278,7 @@ class OANDA(Broker):
                     print(i,"\n")
         :return:
         '''
-        return self.ctx.instrument.candles(instrumentName,**specs).body.get('candles')
+        return self.ctx.instrument.candles(instrumentName, **specs).body.get('candles')
 
 
 if __name__ == '__main__':
