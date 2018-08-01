@@ -43,8 +43,9 @@ def MLP_model(input_dim):
     model.add(Dense(64, activation='relu'))
     model.add(Dropout(0.5))
     model.add(Dense(1, activation='linear'))
-    sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+    sgd = SGD(lr=0.01, decay=1e-6, momentum=0.0, nesterov=False)
+    adam = Adam()
+    rms = RMSprop()
     model.compile(loss='mse',
-                  optimizer=sgd,
-                  metrics=['accuracy'])
+                  optimizer=adam)
     return model

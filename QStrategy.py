@@ -33,13 +33,14 @@ class QStrategy(FXStrategy):
                             token=BROKERS['OANDA']['token'][0])
                             #datetime_format="UNIX")
         self.actions = [
-            (0,0,0), #no action
-            (1,0,0), #long(buy) open
-            (1,1,0), #short(sell) open
-            (1,0,1), #long(buy) close
-            (1,1,1)  #short(sell) close
+            (0,0,0), #no action       0
+            (1,0,0), #long(buy) open  4
+            (1,1,0), #short(sell) open 6
+            (1,0,1), #long(buy) close  5
+            (1,1,1)  #short(sell) close 7
         ]
         self.history = []
+        self.balance = 50
         #self.broker.ctx.set_datetime_format_unix()
 
     def get_state(self, data, time_step):
@@ -84,8 +85,8 @@ class QStrategy(FXStrategy):
                     self.history.append(candle)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(lol())
-        loop.close()
 
+        loop.close()
     def get_curr_state(self, data, time_step):
         '''
          состояние в момент времени time_step
@@ -118,23 +119,46 @@ class QStrategy(FXStrategy):
 
     def get_reward(self, state, action, next_state, data , time_step, broker=None):
         reward = 0
+
         if (action[0]==1):
             if (action[1]==1):
                 #short
                 if (action[2] == 1):
                     #close
-                    reward = 0#-(data[time_step,6]+data[time_step,5])/2
+                    if self.short_pos:
+                        for r in self.short_pos:
+                            reward+=(r - state[1])
+                        self.short_pos.clear()
+                        self.balance+=reward
+                    else:
+                        reward = 0
                 else:
                     #open
-                    reward = ((data[time_step,1]+data[time_step,2])/2)-((data[time_step+1,6]+data[time_step+1,5])/2)#((data[time_step,1]+data[time_step,2])/2)
+                    if self.balance>0:
+                        reward = state[0]-next_state[1]#self.balance
+                        self.short_pos.append(state[0])
+                    else:
+                        reward = 0
+                    self.balance = (self.balance - state[0]) if (self.balance - state[0])>0 else 0
             else:
                 #long
                 if (action[2] == 1):
                     #close
-                    reward = 0#(data[time_step,1]+data[time_step,2])/2
+                    if self.long_pos:
+                        for r in self.long_pos:
+                            reward+=(state[0]-r)
+                        self.long_pos.clear()
+                        self.balance += reward
+                    else:
+                        reward = 0
                 else:
                     #open
-                    reward = (data[time_step+1,1]+data[time_step+1,2])/2-(data[time_step,6]+data[time_step,5])/2#-(data[time_step,6]+data[time_step,5])/2
+                    if (self.balance>0):
+                        reward = next_state[0]-state[1]#self.balance
+                        self.long_pos.append(state[1])
+                    else:
+                        reward = 0
+                    self.balance = self.balance - state[1] if (self.balance - state[1]) > 0 else 0
         else:
             pass
 
@@ -164,7 +188,7 @@ class QStrategy(FXStrategy):
             for memory in storage:
                 old_state, action, reward, new_state = memory
                 # old_qval = model.predict(np.concatenate((old_state, action), axis=2), batch_size=1)
-                old_qval = self.model.predict(np.concatenate((old_state, action), axis=1), batch_size=1)
+                #old_qval = self.model.predict(np.concatenate((old_state, action), axis=1), batch_size=1)
                 Q_n = []
                 # print(time_step,old_state,new_state)
                 for a in self.get_actions(new_state):
@@ -177,7 +201,7 @@ class QStrategy(FXStrategy):
                     Q_n.append(qval)
                 maxQ = np.max(Q_n)
                 newQ_n = (reward + (gamma * maxQ))
-                #print(old_qval, newQ_n, reward)
+                #print(opt_action,reward)
                 # print(reward)
                 # x_train.append(np.concatenate((old_state, action), axis=2))
                 x_train.append(np.concatenate((old_state, action), axis=1))
@@ -191,16 +215,16 @@ class QStrategy(FXStrategy):
         pass
 
     def get_opt_action(self,state, epsilon):
-        Q_n=[]
         actions=self.get_actions(state)
-        for action in actions:
-            a = np.array(action)
+        Q_n=np.zeros(len(actions))
+        for k in range(len(actions)):
+            a = np.array(actions[k])
             # qval = model.predict(np.concatenate((state.reshape(1, 1, state.shape[-1]), a.reshape(1, 1, a.shape[-1])), axis=2), batch_size=1)
             qval = self.model.predict(
                 np.concatenate((state.reshape(1, state.shape[-1]), a.reshape(1, a.shape[-1])), axis=1),
                 batch_size=1)
             #print(np.concatenate((state.reshape(1, state.shape[-1]), a.reshape(1, a.shape[-1])), axis=1))
-            Q_n.append(qval)
+            Q_n[k]=qval
         if (random.random() < epsilon):  # choose random action
             optimal_action = actions[np.random.randint(0, len(actions))]
         else:                            # choose best action from Q(s,a) values
@@ -240,9 +264,9 @@ class QStrategy(FXStrategy):
         :return: (prev_opt_action, prev_state)
         '''
         show = kwargs.get('show')
-        data = dp.candles_to_DataFrame(self.history)
+        df = dp.candles_to_DataFrame(self.history)
         # print(data)
-        raw_data = data.loc[:, slice(('bid', 'o'), ('ask', 'c'))].values
+        raw_data = df.loc[:, (('bid', 'o'),('ask', 'o'),('bid', 'c'),('ask', 'c'))].values
         # diff = np.diff(close)
         # diff = np.insert(diff, 0, 0)
         # sma15 = SMA(data, timeperiod=15)
@@ -251,25 +275,39 @@ class QStrategy(FXStrategy):
         # atr = ATR(data, timeperiod=14)
         # --- Preprocess data
         # data = np.column_stack((close, diff, sma15, close - sma15, sma15 - sma60, rsi, atr))
-        scaler = preprocessing.StandardScaler()
+        #scaler = preprocessing.StandardScaler()
         # joblib.dump(scaler, 'scaler.pkl')
         # scaler = joblib.load('scaler.pkl')
-        data = scaler.fit_transform(raw_data)
+        raw_data = raw_data-1.0#scaler.fit_transform(raw_data)
+        bid_change = (raw_data[:,2]-raw_data[:,0])*100.0/raw_data[:,0]
+        bid_change = bid_change.reshape(bid_change.shape[0],1)
+        ask_change = (raw_data[:,3]-raw_data[:,1])*100.0/raw_data[:,1]
+        ask_change = ask_change.reshape(ask_change.shape[0], 1)
+        #print(bid_change)
+        #print(raw_data[:, (2, 3)])
+        data = np.concatenate((raw_data[:,(2,3)],bid_change,ask_change),axis=1)
         print(data)
+        #print(df)
         dataset_size = data.shape[0]#1000
         input_dim = data.shape[1]+len(self.actions[0])
-        print(input_dim)
         self.model = MLP_model(input_dim)
         start_time = timeit.default_timer()
         gamma = 0.95
-        epsilon = 0.1
+        epsilon = 1
+        multiplier=10
         batchSize = 100
         storage_size = 1
         storage = []
         h = 0
         # taken_actions = []
         # signals = [[], []]
+        balance = 20
         for i in range(epochs):
+            self.balance = balance
+            self.long_pos = []
+            self.short_pos = []
+            maxQ = np.NINF
+            #print (maxQ)
             time_step = 0 if (data.shape[0]-dataset_size)<=0 else data.shape[0]-dataset_size
             taken_actions = []
             signals = [[], []]  # np.zeros((2, 0))
@@ -281,43 +319,59 @@ class QStrategy(FXStrategy):
                 opt_action = self.get_opt_action(state,epsilon)
                 # take_action()
                 # broker.step()
+                if show:
+                    signals[0].append(state[0])
+                    signals[1].append(state[1])
+                    a=0
+                    for k in range(len(opt_action)):
+                        a+=opt_action[k]*(2**(len(opt_action)-k-1))
+                    taken_actions.append(a)
                 if time_step + 1 == data.shape[0] - 1:
                     terminal_state = 1
                 else:
                     terminal_state = 0
                 time_step += 1
                 next_state = self.get_state(data, time_step)
-                newQ_n = self.save_experience(storage,storage_size, time_step-1,state,opt_action,next_state,gamma,raw_data)
+                newQ = self.save_experience(storage,storage_size, time_step-1,state,opt_action,next_state,gamma,raw_data)
+                maxQ = newQ if newQ>maxQ else maxQ
                 state = next_state
                 if terminal_state == 1:  # if reached terminal state, update epoch status
                     status = 0
                 # eval_reward = evaluate_Q(test_data, model, price_data, i)
                 #  learning_progress.append((eval_reward))
-            print("Epoch #: %d Reward: %f Epsilon: %f" % (i, newQ_n, epsilon))
+            print("Epoch #: %d Max_Q: %f Epsilon: %f Balance: %f" % (i, maxQ, epsilon,self.balance))
             # learning_progress.append(reward)
             if epsilon > 0.00:  # decrement epsilon over time
-                epsilon -= (1.0 / epochs)
-        if show:
-            plt.title('Experiment №2.' + str(i) + '_epoch')
-            plt.ylabel('state')
-            plt.xlabel('time steps')
-            plt.plot(signals[0], color='yellow', label='sell price')
-            # plt.plot(signals[1], color='green', label='buy price')
-            cmap = mpl.cm.get_cmap('RdBu', 3)
-            plt.grid(True)
-            sc = plt.scatter(np.arange(len(taken_actions)), (np.array(signals[0])),
-                             c=taken_actions,
-                             cmap=cmap, vmin=-1,
-                             vmax=1, marker='v')
-            plt.colorbar(sc, label='Actions')
-            plt.legend()
-            self.save('exp2_' + str(i) + '_epoch', 'png')
-            plt.show()
+                epsilon -= (multiplier*1.0 / epochs)
+            if show:
+                plt.title('Experiment №3. Epoch №'+str(i))
+                plt.ylabel('state')
+                plt.xlabel('time steps')
+                plt.plot(signals[0], color='black', label='bid price',linewidth=0.5)
+                # plt.plot(signals[1], color='green', label='ask price')
+                #cmap = mpl.cm.get_cmap('RdBu', 3)
+                plt.grid(True)
+                sc = plt.scatter(np.arange(len(taken_actions)),(np.array(signals[0])),
+                                 c=taken_actions,
+                                 cmap=plt.cm.get_cmap('Accent'),
+                                 vmin=min(taken_actions),
+                                 vmax=max(taken_actions),
+                                 marker='*')
+                plt.colorbar(sc, label='Actions')
+                plt.legend()
+                if not (i%100):
+                    self.save('exp3_' + str(i) + '_epoch', 'png')
+                    plt.show()
+                if not (i%200) and i:
+                    epsilon=1
+                    multiplier=50
+                plt.clf()
+        return opt_action
 
 if __name__ == '__main__':
     strategy = QStrategy()
-    strategy.load_history('EUR_USD', datetime.datetime(2018, 6, 1, 0, 0, 0, 0))
-    (prev_opt_action, prev_state) = strategy.train()
+    strategy.load_history('EUR_USD', datetime.datetime(2018, 7, 29, 0, 0, 0, 0))
+    (prev_state) = strategy.train(epochs=1000,show=True)
     '''
     state = self.get_curr_state()
     actions = self.get_actions(state)
